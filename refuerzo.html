@@ -150,8 +150,9 @@
     const score=Math.round(100*res.ok/res.ans);
     let sug='';
     if(isPlacement){
+      if(res.ans < res.total){ toast('Responde todas las preguntas del diagnóstico ('+res.ans+'/'+res.total+') antes de terminar'); return; }
       const orden=['A1','A2','B1','B2','C1','C2'];
-      orden.forEach(n=>{ const b=res.por_area&&res.por_area['Nivel '+n]; if(b&&b.total&&(b.ok/b.total)>=0.7) sug=n; });
+      for(var oi=0; oi<orden.length; oi++){ const b=res.por_area&&res.por_area['Nivel '+orden[oi]]; if(!b||!b.total) continue; if((b.ok/b.total)>=0.7) sug=orden[oi]; else break; }
     }
     try{
       const base={temaId:'', tema:window.SEQUENCE_DATA.tema, area:'', nivel:isPlacement?'':(nivel||''),

@@ -105,10 +105,10 @@ function computarAreas(rs){
 
 function elegirEjercicios(area,nivel,weak,cuantos){
   cuantos=cuantos||4;
-  let pool=banco.filter(x=>x.area===area && x.nivel===nivel);
-  if(pool.length<cuantos*2) pool=pool.concat(banco.filter(x=>x.area===area && x.nivel!==nivel));
-  const seen=new Set(), uniq=[];
-  shuffle(pool).forEach(x=>{ const k=JSON.stringify(x.ejercicio); if(seen.has(k))return; seen.add(k); uniq.push(x); });
+  const seen=new Set();
+  const dedup=list=>{ const out=[]; shuffle(list).forEach(x=>{ const k=JSON.stringify(x.ejercicio); if(seen.has(k))return; seen.add(k); out.push(x); }); return out; };
+  let uniq=dedup(banco.filter(x=>x.area===area && x.nivel===nivel));
+  if(uniq.length<cuantos) uniq=uniq.concat(dedup(banco.filter(x=>x.area===area && x.nivel!==nivel)));
   const weakPool = weak? uniq.filter(x=>x.etapa===weak):[];
   const rest = uniq.filter(x=>!weak || x.etapa!==weak);
   const nWeak = weak? Math.min(weakPool.length, Math.ceil(cuantos*0.6)):0;
@@ -200,6 +200,7 @@ function construirPlacement(){
     if(arr.length) meta.push({area:'Nivel '+n, n:arr.length});
   });
   plan={ejercicios:ejercicios, meta:meta};
+  if(!ejercicios.length){ const p=document.getElementById('panel'); p.innerHTML='<div class="card">No pude cargar los diagnósticos (revisa la conexión al sitio público) e intenta de nuevo.</div>'; p.classList.remove('hidden'); return; }
   let html='<div class="card"><p><b>'+esc(est.nombre)+'</b> aún no tiene historial. Te armé un <b>diagnóstico de nivel</b> con '+ejercicios.length+' preguntas de contraste (error típico vs. forma correcta), repartidas de A1 a C1. Al completarlo, el sistema sugiere un nivel automáticamente.</p></div>';
   html+='<div class="card"><div class="row" style="gap:16px">'+meta.map(m=>'<div><b>'+m.n+'</b> <span class="muted">'+esc(m.area)+'</span></div>').join('')+'</div></div>';
   html+='<div class="row" style="justify-content:flex-end;gap:10px;margin-top:16px"><button class="ghost" onclick="location.href=\'index.html\'">Cancelar</button><button class="red" id="btnAsignar">📋 Asignar diagnóstico</button></div>';
