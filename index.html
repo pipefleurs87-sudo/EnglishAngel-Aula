@@ -59,6 +59,7 @@
       </div>
       <div class="row" style="gap:8px">
         <button class="sec" onclick="verGalaxia()">🌌 Ver galaxia</button>
+        <button class="sec" onclick="abrirRefuerzo()">🎯 Refuerzo automático</button>
         <button class="sec" onclick="copiarLink()">Copiar link privado</button>
         <button class="ghost" onclick="borrarEstudiante()">Eliminar</button>
       </div>
@@ -226,6 +227,7 @@ function copiarLink(){
     .then(()=>toast('Link copiado')).catch(()=>prompt('Copia el link:', linkEstudiante(detToken)));
 }
 function verGalaxia(){ window.open('galaxia.html?t=' + encodeURIComponent(detToken), '_blank', 'noopener'); }
+function abrirRefuerzo(){ window.open('refuerzo-generar.html?t=' + encodeURIComponent(detToken), '_blank', 'noopener'); }
 async function borrarEstudiante(){
   if(!confirm(`¿Eliminar a ${detData.nombre}? Su historial dejará de ser accesible.`)) return;
   await db.collection('estudiantes').doc(detToken).delete();
