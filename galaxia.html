@@ -133,6 +133,12 @@ function aggLast(results){
     if(ms!=null && !isNaN(ms)){ if(!(r.temaId in m) || ms>m[r.temaId]) m[r.temaId]=ms; } } });
   return m;
 }
+function aggCount(results){
+  const m={};
+  (results||[]).forEach(r=>{ if(r&&r.temaId!=null){ const s=Number(r.score);
+    if(!isNaN(s)){ m[r.temaId]=(m[r.temaId]||0)+1; } } });
+  return m;
+}
 const FRESH_OK=15, FRESH_COLD=45, FRESH_FLOOR=0.18;
 function freshFactor(days){
   if(days==null||days<=FRESH_OK) return 1;
@@ -151,6 +157,8 @@ const STATE_COL={apagada:0x3E4E66,tenue:0xB23A2E,brillante:0x4FA3A5,supernova:0x
 const STATE_GLOW={apagada:2.6,tenue:5,brillante:7.5,supernova:11.5};
 const STATE_OPA={apagada:.42,tenue:.75,brillante:1,supernova:1};
 const STATE_LBL={supernova:'Dominado ≥85',brillante:'Aprobado 75–84',tenue:'En progreso <75',apagada:'Sin practicar'};
+// Glow extra cuando el estudiante repasa un tema ya aprobado (2+ intentos guardados).
+const REVIEW_GLOW_MULT=1.5;
 const ORDER_ALL=['A1','A2','B1','B2','C1','C2'];
 const LVLNAME={A1:'A1',A2:'A2',B1:'B1',B2:'B2',C1:'C1',C2:'C2'};
 const ARQ={tiempo_verbal:0xC9962F,modales:0xCC4A3C,vocabulario:0x4FA3A5,joined_exercise:0x8E7CC3,determinantes:0x5B8DBE,funcional_skills:0xC97BA0,clausulas_relativas:0x7FA65A,pronombres:0xD98E4A,preposiciones:0x3FB6C9,comparativos:0xA8B44A};
@@ -158,7 +166,7 @@ const ARQ={tiempo_verbal:0xC9962F,modales:0xCC4A3C,vocabulario:0x4FA3A5,joined_e
 async function boot(){
   if(!token){ return fail('Este link no es válido. Pídele a Felipe tu link personal.'); }
   $('backlink').href='estudiante.html?t='+encodeURIComponent(token);
-  let est, temas, bestById={}, lastById={}, pendingById=new Set();
+  let est, temas, bestById={}, lastById={}, countById={}, pendingById=new Set();
   try{
     const ref=db.collection('estudiantes').doc(token);
     const [snap, tj, rq, tq]=await Promise.all([
@@ -172,13 +180,13 @@ async function boot(){
     const cat = tj || await fetch('catalogo.json').then(r=>r.json());
     temas = cat.map(t=>({id:t.id,n:t.nivel,a:t.area||'',t:t.tema,q:t.arquetipo||'tiempo_verbal',h:t.habilidades||[]}));
     const _res=rq.docs.map(d=>d.data());
-    bestById=aggBest(_res); lastById=aggLast(_res);
+    bestById=aggBest(_res); lastById=aggLast(_res); countById=aggCount(_res);
     tq.docs.forEach(d=>{ const t=d.data(); if(t.estado!=='hecha' && t.temaId) pendingById.add(t.temaId); });
   }catch(e){ console.error(e); return fail('No se pudo cargar tu galaxia. Revisa tu conexión e intenta de nuevo.'); }
-  build(est, temas, bestById, pendingById, lastById);
+  build(est, temas, bestById, pendingById, lastById, countById);
 }
 
-function build(est, TEMAS, bestById, pendingById, lastById){
+function build(est, TEMAS, bestById, pendingById, lastById, countById){
   const ORDER=ORDER_ALL.filter(l=>TEMAS.some(t=>t.n===l));
   $('hName').innerHTML='Galaxia de '+esc((est.nombre||'').split(' ')[0])+' <span class="angel">✦</span>';
   $('hLevel').textContent='NIVEL '+(est.nivel||'—')+' · '+TEMAS.length+' TEMAS · A1 → C2';
@@ -225,15 +233,21 @@ function build(est, TEMAS, bestById, pendingById, lastById){
     const lastMs=(t.id in lastById)?lastById[t.id]:null;
     const days=lastMs!=null?(Date.now()-lastMs)/86400000:null;
     const fresh=(score==null)?1:freshFactor(days);
+    const attempts=countById[t.id]||0;
+    const reviewed=st!=='apagada' && attempts>1;
+    const glowMult=reviewed?REVIEW_GLOW_MULT:1;
     const mesh=new THREE.Mesh(new THREE.SphereGeometry(1.55,16,12),new THREE.MeshBasicMaterial({color:STATE_COL[st],transparent:true,opacity:STATE_OPA[st]*(.5+.5*fresh)}));
     mesh.position.copy(p);mesh.userData=t;root.add(mesh);
-    const gm=new THREE.SpriteMaterial({map:GLOW,color:STATE_COL[st],transparent:true,opacity:.85*fresh,blending:THREE.AdditiveBlending,depthWrite:false});
-    const glow=new THREE.Sprite(gm);glow.position.copy(p);glow.scale.setScalar(STATE_GLOW[st]*fresh);root.add(glow);
+    const gm=new THREE.SpriteMaterial({map:GLOW,color:STATE_COL[st],transparent:true,opacity:Math.min(1,.85*fresh*glowMult),blending:THREE.AdditiveBlending,depthWrite:false});
+    const glow=new THREE.Sprite(gm);glow.position.copy(p);glow.scale.setScalar(STATE_GLOW[st]*fresh*glowMult);root.add(glow);
     const pending=pendingById.has(t.id);
     let ring=null;
     if(pending){ ring=new THREE.Sprite(new THREE.SpriteMaterial({map:RING,color:0xC9962F,transparent:true,opacity:.9,depthWrite:false}));
       ring.position.copy(p);ring.scale.setScalar(6.5);root.add(ring);}
-    const nd={t,mesh,glow,ring,base:p.clone(),phase:Math.random()*Math.PI*2,vis:true,score,scoreState:st,pending,days,fresh,gbase:STATE_GLOW[st]*fresh};
+    let reviewRing=null;
+    if(reviewed){ reviewRing=new THREE.Sprite(new THREE.SpriteMaterial({map:RING,color:0x4FA3A5,transparent:true,opacity:.8,depthWrite:false}));
+      reviewRing.position.copy(p);reviewRing.scale.setScalar(9);root.add(reviewRing);}
+    const nd={t,mesh,glow,ring,reviewRing,base:p.clone(),phase:Math.random()*Math.PI*2,vis:true,score,scoreState:st,pending,days,fresh,attempts,reviewed,gbase:STATE_GLOW[st]*fresh*glowMult};
     nodes.push(nd);nodeByid[t.id]=nd;
    });
   });
@@ -292,7 +306,7 @@ function build(est, TEMAS, bestById, pendingById, lastById){
     tip.style.display='block';
     const sl=nd.score==null?'Sin practicar':('Mejor: '+nd.score+'%');
     const fl=freshLabel(nd.days);
-    tip.innerHTML='<div class="tt">'+t.t+'</div><div class="tm">'+LVLNAME[t.n]+' · '+t.a+'</div><div class="ts sc-'+nd.scoreState+'">'+(nd.pending?'◎ tarea pendiente · ':'')+sl+(fl?' · '+fl:'')+'</div>';
+    tip.innerHTML='<div class="tt">'+t.t+'</div><div class="tm">'+LVLNAME[t.n]+' · '+t.a+'</div><div class="ts sc-'+nd.scoreState+'">'+(nd.pending?'◎ tarea pendiente · ':'')+(nd.reviewed?'✦ repasado · ':'')+sl+(fl?' · '+fl:'')+'</div>';
     tip.style.left=Math.min(innerWidth-280,e.clientX+16)+'px';tip.style.top=Math.max(8,e.clientY-14)+'px';}
    else{if(!drag)cv.style.cursor='grab';hovered=null;tip.style.display='none';}}
   cv.addEventListener('click',e=>{if(moved>6)return;const t=pick(e);if(t)openPanel(t);else closePanel();});
@@ -302,7 +316,7 @@ function build(est, TEMAS, bestById, pendingById, lastById){
    const nd=nodeByid[t.id];
    $('p-lvl').textContent=LVLNAME[t.n]+' · '+t.a;
    $('p-title').textContent=t.t;
-   $('p-score').innerHTML=nd.score==null?'<span class="ns">Nunca practicado — ¡tu primera estrella te espera!</span>':('Tu mejor score: <b class="sc-'+nd.scoreState+'">'+nd.score+'%</b>'+(nd.days!=null?'<br><span class="ns" style="font-style:normal;color:'+(nd.days>FRESH_COLD?'#e06a5c':'#8b94a0')+'">'+freshLabel(nd.days)+'</span>':''));
+   $('p-score').innerHTML=nd.score==null?'<span class="ns">Nunca practicado — ¡tu primera estrella te espera!</span>':('Tu mejor score: <b class="sc-'+nd.scoreState+'">'+nd.score+'%</b>'+(nd.reviewed?' <span style="color:var(--teal)">· ✦ repasado</span>':'')+(nd.days!=null?'<br><span class="ns" style="font-style:normal;color:'+(nd.days>FRESH_COLD?'#e06a5c':'#8b94a0')+'">'+freshLabel(nd.days)+'</span>':''));
    $('p-pend').style.display=nd.pending?'block':'none';
    $('p-skills').innerHTML=(t.h||[]).map(s=>'<span>'+s+'</span>').join('');
    $('p-practice').href='ejercicio.html?t='+encodeURIComponent(token)+'&tema='+encodeURIComponent(t.id);
@@ -330,28 +344,31 @@ function build(est, TEMAS, bestById, pendingById, lastById){
   ['supernova','brillante','tenue','apagada'].forEach(k=>chip(k,STATE_LBL[k],'<span class="dot" style="background:#'+STATE_COL[k].toString(16).padStart(6,'0')+'"></span>'));
   chip('pending','Tarea pendiente','<span class="ring"></span>');
   chip('review','Para repasar','<span class="dot" style="background:#e06a5c"></span>');
+  chip('repasado','✦ Repasado','<span class="ring" style="border-color:var(--teal)"></span>');
   // search
   const searchEl=$('search');let term='';
   searchEl.addEventListener('input',()=>{term=searchEl.value.trim().toLowerCase();applyFilter();});
   searchEl.addEventListener('keydown',e=>{if(e.key==='Enter'){const m=nodes.find(n=>n.vis);if(m)openPanel(m.t);}});
   function match(n){
    const t=n.t;
-   if(stateFilter){ if(stateFilter==='pending'){ if(!n.pending) return false; } else if(stateFilter==='review'){ if(!(n.days!=null&&n.days>FRESH_COLD)) return false; } else if(n.scoreState!==stateFilter) return false; }
+   if(stateFilter){ if(stateFilter==='pending'){ if(!n.pending) return false; } else if(stateFilter==='review'){ if(!(n.days!=null&&n.days>FRESH_COLD)) return false; } else if(stateFilter==='repasado'){ if(!n.reviewed) return false; } else if(n.scoreState!==stateFilter) return false; }
    if(term&&!(t.t.toLowerCase().includes(term)||t.a.toLowerCase().includes(term)||t.n.toLowerCase().includes(term)))return false;
    return true;}
   const DIMCOL=new THREE.Color(0x2A3547);
   function applyFilter(){
    nodes.forEach(n=>{n.vis=match(n);
+    const gm2=n.reviewed?REVIEW_GLOW_MULT:1;
     n.mesh.material.color.set(n.vis?STATE_COL[n.scoreState]:DIMCOL);
     n.mesh.material.opacity=n.vis?STATE_OPA[n.scoreState]*(.5+.5*n.fresh):.06;
-    n.glow.material.opacity=n.vis?.85*n.fresh:.03;
-    n.gbase=n.vis?STATE_GLOW[n.scoreState]*n.fresh:2;
-    if(n.ring)n.ring.material.opacity=n.vis?.9:.05;});
+    n.glow.material.opacity=n.vis?Math.min(1,.85*n.fresh*gm2):.03;
+    n.gbase=n.vis?STATE_GLOW[n.scoreState]*n.fresh*gm2:2;
+    if(n.ring)n.ring.material.opacity=n.vis?.9:.05;
+    if(n.reviewRing)n.reviewRing.material.opacity=n.vis?.8:.04;});
    threads.forEach(th=>{th.line.material.opacity=(!stateFilter&&!term)?.16:.04;});}
   // counts
-  const cnt={supernova:0,brillante:0,tenue:0,apagada:0},pend=nodes.filter(n=>n.pending).length,review=nodes.filter(n=>n.days!=null&&n.days>FRESH_COLD).length;
+  const cnt={supernova:0,brillante:0,tenue:0,apagada:0},pend=nodes.filter(n=>n.pending).length,review=nodes.filter(n=>n.days!=null&&n.days>FRESH_COLD).length,repasados=nodes.filter(n=>n.reviewed).length;
   nodes.forEach(n=>cnt[n.scoreState]++);
-  $('counts').textContent='✦ '+cnt.supernova+' dominados · '+cnt.brillante+' bien · '+cnt.tenue+' en progreso · '+cnt.apagada+' sin practicar'+(pend?' · ◎ '+pend+' pendientes':'')+(review?' · ⟳ '+review+' por repasar':'');
+  $('counts').textContent='✦ '+cnt.supernova+' dominados · '+cnt.brillante+' bien · '+cnt.tenue+' en progreso · '+cnt.apagada+' sin practicar'+(pend?' · ◎ '+pend+' pendientes':'')+(review?' · ⟳ '+review+' por repasar':'')+(repasados?' · ✦ '+repasados+' repasados':'');
   applyFilter();
   // animate
   const clock=new THREE.Clock();let frames=0;
@@ -361,9 +378,10 @@ function build(est, TEMAS, bestById, pendingById, lastById){
    if(sphGoal){sph.r+=(sphGoal.r-sph.r)*.06;sph.th+=(sphGoal.th-sph.th)*.06;sph.ph+=(sphGoal.ph-sph.ph)*.06;if(Math.abs(sphGoal.r-sph.r)<.5)sphGoal=null;}
    if(targetGoal){target.lerp(targetGoal,.07);if(target.distanceTo(targetGoal)<.4)targetGoal=null;}
    if(sphGoal||targetGoal)applyCam();
-   nodes.forEach(n=>{const amp=(n.scoreState==='supernova'?.34:.18)*n.fresh;const pulse=1+Math.sin(t*1.6+n.phase)*amp;
+   nodes.forEach(n=>{const amp=(n.reviewed?.30:(n.scoreState==='supernova'?.34:.18))*n.fresh;const pulse=1+Math.sin(t*1.6+n.phase)*amp;
     n.glow.scale.setScalar(n.gbase*pulse);
     if(n.ring){const rp=1+Math.sin(t*2.4+n.phase)*.22;n.ring.scale.setScalar(6.5*rp);n.ring.material.opacity=(n.vis?.9:.05)*(0.6+0.4*Math.sin(t*2.4+n.phase));}
+    if(n.reviewRing){const rp2=1+Math.sin(t*1.8+n.phase+1.1)*.2;n.reviewRing.scale.setScalar(9*rp2);n.reviewRing.material.opacity=(n.vis?.8:.04)*(0.55+0.45*Math.sin(t*1.8+n.phase+1.1));}
     const hv=hovered&&hovered.id===n.t.id;n.mesh.scale.setScalar(hv?1.8:1);});
    root.rotation.y=Math.sin(t*.05)*.02;
    renderer.render(scene,camera);
