@@ -115,7 +115,7 @@ function fail(msg){ const L=$('loading'); L.style.opacity=1; L.innerHTML='<div c
 // ---------- lógica pura (testeada) ----------
 function scoreState(score){
   if(score==null||score===undefined) return 'apagada';
-  if(score < 60) return 'tenue';
+  if(score < 75) return 'tenue';
   if(score < 85) return 'brillante';
   return 'supernova';
 }
@@ -150,7 +150,7 @@ function freshLabel(days){
 const STATE_COL={apagada:0x3E4E66,tenue:0xB23A2E,brillante:0x4FA3A5,supernova:0xC9962F};
 const STATE_GLOW={apagada:2.6,tenue:5,brillante:7.5,supernova:11.5};
 const STATE_OPA={apagada:.42,tenue:.75,brillante:1,supernova:1};
-const STATE_LBL={supernova:'Dominado ≥85',brillante:'Bien 60–84',tenue:'En progreso <60',apagada:'Sin practicar'};
+const STATE_LBL={supernova:'Dominado ≥85',brillante:'Aprobado 75–84',tenue:'En progreso <75',apagada:'Sin practicar'};
 const ORDER_ALL=['A1','A2','B1','B2','C1','C2'];
 const LVLNAME={A1:'A1',A2:'A2',B1:'B1',B2:'B2',C1:'C1',C2:'C2'};
 const ARQ={tiempo_verbal:0xC9962F,modales:0xCC4A3C,vocabulario:0x4FA3A5,joined_exercise:0x8E7CC3,determinantes:0x5B8DBE,funcional_skills:0xC97BA0,clausulas_relativas:0x7FA65A,pronombres:0xD98E4A,preposiciones:0x3FB6C9,comparativos:0xA8B44A};
